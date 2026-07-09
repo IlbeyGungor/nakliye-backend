@@ -1,0 +1,104 @@
+require('dotenv').config();
+const express = require('express');
+const helmet  = require('helmet');
+const cors    = require('cors');
+const path    = require('path');
+
+const authRoutes     = require('./routes/auth');
+const listingRoutes  = require('./routes/listings');
+const offerRoutes    = require('./routes/offers');
+const { usersRouter } = require('./routes/other');
+const errorHandler   = require('./middleware/errorHandler');
+const { scheduleReservedListingCleanup } = require('./jobs/cleanupReservedListings');
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+const uploadRoutes = require('./routes/upload');
+const tokenRoutes = require('./routes/tokens');
+
+const defaultCorsOrigins = [
+  'https://app.nakliye-pazar.com',
+  'https://nakliye-pazar.com',
+  'https://www.nakliye-pazar.com',
+  'https://nakliye-pazar.web.app',
+  'https://nakliye-pazar.firebaseapp.com',
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:8080',
+  'http://localhost:8081',
+];
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedCorsOrigins = new Set([
+  ...defaultCorsOrigins,
+  ...corsOrigins,
+]);
+
+function isAllowedCorsOrigin(origin) {
+  if (allowedCorsOrigins.has(origin)) return true;
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return (
+      (protocol === 'http:' || protocol === 'https:') &&
+      (hostname === 'localhost' || hostname === '127.0.0.1')
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+// Security & parsing
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    callback(null, isAllowedCorsOrigin(origin));
+  },
+  methods: ['GET','POST','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','Cache-Control','Pragma'],
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/listings', uploadRoutes);
+app.use('/api/tokens', tokenRoutes);
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// ── Routes ────────────────────────────────────────────────────
+app.use('/api/auth',     authRoutes);
+app.use('/api/listings', listingRoutes);
+app.use('/api/offers',   offerRoutes);
+app.use('/api/users',    usersRouter);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Nakliye Pazar API',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 404
+app.use((req, res) => res.status(404).json({ error: 'Endpoint bulunamadı.' }));
+
+// Global error handler
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`\n🚚  Nakliye Pazar API running on http://localhost:${PORT}`);
+  console.log(`   ENV: ${process.env.NODE_ENV || 'development'}\n`);
+});
+
+scheduleReservedListingCleanup();
+
+module.exports = app;
