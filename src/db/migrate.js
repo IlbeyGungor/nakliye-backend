@@ -57,6 +57,12 @@ const migrate = async () => {
         city            VARCHAR(80),
         district        VARCHAR(80),
         address         VARCHAR(255),
+        origin_city     VARCHAR(80),
+        origin_district VARCHAR(120),
+        origin_note     VARCHAR(255),
+        destination_city VARCHAR(80),
+        destination_district VARCHAR(120),
+        destination_note VARCHAR(255),
         description     TEXT,
         status          VARCHAR(20) NOT NULL CHECK (status IN ('active','sold','reserved')) DEFAULT 'active',
         transport_date  DATE,
@@ -75,6 +81,21 @@ const migrate = async () => {
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS transport_date DATE`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_until TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS origin_city VARCHAR(80)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS origin_district VARCHAR(120)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS origin_note VARCHAR(255)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_city VARCHAR(80)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_district VARCHAR(120)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_note VARCHAR(255)`);
+    await client.query(`
+      UPDATE listings
+      SET origin_city = COALESCE(origin_city, city),
+          origin_district = COALESCE(origin_district, district),
+          origin_note = COALESCE(origin_note, address)
+      WHERE origin_city IS NULL
+         OR origin_district IS NULL
+         OR origin_note IS NULL
+    `);
     await client.query(`
       UPDATE listings
       SET reserved_at = COALESCE(reserved_at, updated_at, NOW()),
@@ -166,6 +187,8 @@ const migrate = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_seller       ON listings(seller_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_type         ON listings(listing_type)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_city         ON listings(city)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_origin_city  ON listings(origin_city)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_destination_city ON listings(destination_city)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_category     ON listings(category)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_status       ON listings(status)`);
     await client.query(`

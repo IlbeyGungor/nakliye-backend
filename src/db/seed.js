@@ -26,13 +26,14 @@ const seed = async () => {
     await client.query(`
       INSERT INTO listings (
         id,seller_id,listing_type,title,category,quantity,unit,price_per_unit,
-        price_type,city,district,description,status,transport_date
+        price_type,city,district,address,origin_city,origin_district,origin_note,
+        destination_city,destination_district,destination_note,description,status,transport_date
       )
       VALUES
-        ($1,$5,'vehicle_search','İstanbul - Ankara 18 ton paletli yük','semi_truck',18,'ton',4200,'negotiate','İstanbul','Esenler','Yarın sabah yükleme yapılacak. Tenteli tır veya kapalı kasa uygundur.','active',CURRENT_DATE + 1),
-        ($2,$6,'cargo_search','İzmir çıkışlı frigorifik araç müsait','refrigerated',22,'ton',5200,'fixed','İzmir','Bornova','Hafta içi Ege ve Marmara rotalarına uygun frigorifik araç.','active',CURRENT_DATE + 2),
-        ($3,$7,'vehicle_search','Konya - Mersin konteyner taşıması','container',1,'sefer',7800,'negotiate','Konya','Selçuklu','40 feet konteyner için liman teslimli taşıma arıyoruz.','active',CURRENT_DATE + 3),
-        ($4,$6,'cargo_search','Boş dönüş: Bursa - İstanbul kamyonet','van',3,'ton',1800,'negotiate','Bursa','Nilüfer','Bugün akşam İstanbul yönüne boş dönüş var, parsiyel yük alınır.','active',CURRENT_DATE)
+        ($1,$5,'vehicle_search','İstanbul - Ankara 18 ton paletli yük','semi_truck',18,'ton',4200,'negotiate','İstanbul','Esenler','Esenler depo çıkışı','İstanbul','Esenler','Yarın sabah yükleme yapılacak.','Ankara','Yenimahalle','Sanayi bölgesi teslim.','Tenteli tır veya kapalı kasa uygundur.','active',CURRENT_DATE + 1),
+        ($2,$6,'cargo_search','İzmir çıkışlı frigorifik araç müsait','refrigerated',22,'ton',5200,'fixed','İzmir','Bornova','Bornova çıkışlı','İzmir','Bornova','Hafta içi yükleme uygundur.','İstanbul','Tuzla','Soğuk zincir varış için uygundur.','Ege ve Marmara rotalarına uygun frigorifik araç.','active',CURRENT_DATE + 2),
+        ($3,$7,'vehicle_search','Konya - Mersin konteyner taşıması','container',1,'sefer',7800,'negotiate','Konya','Selçuklu','Selçuklu fabrika çıkışı','Konya','Selçuklu','40 feet konteyner için yükleme.','Mersin','Akdeniz','Liman teslimli.','Konteyner taşıması için araç arıyoruz.','active',CURRENT_DATE + 3),
+        ($4,$6,'cargo_search','Boş dönüş: Bursa - İstanbul kamyonet','van',3,'ton',1800,'negotiate','Bursa','Nilüfer','Nilüfer çıkışlı','Bursa','Nilüfer','Bugün akşam çıkış var.','İstanbul','Esenyurt','Parsiyel yük alınır.','Boş dönüş için kamyonet müsait.','active',CURRENT_DATE)
     `, [l1, l2, l3, l4, u1, u2, u3]);
 
     await client.query('COMMIT');

@@ -33,6 +33,12 @@ const reportLimiter = rateLimit({
   },
 });
 
+function emptyToNull(value) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
 // GET /api/listings  (public, with optional filters)
 router.get('/', async (req, res, next) => {
   try {
@@ -61,12 +67,31 @@ router.get('/', async (req, res, next) => {
 
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`(l.title ILIKE $${params.length} OR l.category ILIKE $${params.length} OR l.city ILIKE $${params.length} OR l.district ILIKE $${params.length})`);
+      conditions.push(`(
+        l.title ILIKE $${params.length}
+        OR l.category ILIKE $${params.length}
+        OR l.city ILIKE $${params.length}
+        OR l.district ILIKE $${params.length}
+        OR l.address ILIKE $${params.length}
+        OR l.origin_city ILIKE $${params.length}
+        OR l.origin_district ILIKE $${params.length}
+        OR l.origin_note ILIKE $${params.length}
+        OR l.destination_city ILIKE $${params.length}
+        OR l.destination_district ILIKE $${params.length}
+        OR l.destination_note ILIKE $${params.length}
+      )`);
     }
     const listingType = listing_type || type;
     if (listingType) { params.push(listingType); conditions.push(`l.listing_type = $${params.length}`); }
     if (category) { params.push(category); conditions.push(`l.category = $${params.length}`); }
-    if (city)     { params.push(city);     conditions.push(`l.city = $${params.length}`); }
+    if (city) {
+      params.push(city);
+      conditions.push(`(
+        l.city = $${params.length}
+        OR l.origin_city = $${params.length}
+        OR l.destination_city = $${params.length}
+      )`);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     params.push(parseInt(limit), offset);
@@ -149,7 +174,11 @@ Açıklama: ${description || '-'}
 Başlık: ${listing?.crop_name || listing?.title || '-'}
 Navlun: ${listing?.price || listing?.price_per_unit || '-'}
 Yük/Kapasite: ${listing?.quantity || '-'}
-Konum: ${listing?.location_display || [listing?.city, listing?.district].filter(Boolean).join(' / ') || '-'}
+Güzergah: ${listing?.route_display || listing?.location_display || [listing?.city, listing?.district].filter(Boolean).join(' / ') || '-'}
+Nereden: ${[listing?.origin_city || listing?.city, listing?.origin_district || listing?.district].filter(Boolean).join(' / ') || '-'}
+Yükleme Notu: ${listing?.origin_note || listing?.address || '-'}
+Nereye: ${[listing?.destination_city, listing?.destination_district].filter(Boolean).join(' / ') || '-'}
+Varış Notu: ${listing?.destination_note || '-'}
 İlan Sahibi: ${listing?.seller_name || listing?.seller?.name || '-'} (${listing?.seller_id || listing?.seller?.id || '-'})
 
 Bildiren: ${reporter?.name || 'Misafir'} (${reporter?.id || '-'})
@@ -175,6 +204,12 @@ router.post('/', authMiddleware, [
   body('category').isIn(['van','truck','semi_truck','flatbed','refrigerated','container','other']),
   body('quantity').isFloat({ gt: 0 }),
   body('price_per_unit').isFloat({ gt: 0 }),
+  body('origin_city').optional({ nullable: true }).trim(),
+  body('origin_district').optional({ nullable: true }).trim(),
+  body('origin_note').optional({ nullable: true }).trim(),
+  body('destination_city').optional({ nullable: true }).trim(),
+  body('destination_district').optional({ nullable: true }).trim(),
+  body('destination_note').optional({ nullable: true }).trim(),
 ], async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -187,17 +222,29 @@ router.post('/', authMiddleware, [
     } = req.body;
     const title = String(req.body.title || req.body.crop_name || '').trim();
     const transportDate = req.body.transport_date || req.body.harvest_date || null;
+    const originCity = emptyToNull(req.body.origin_city ?? req.body.originCity ?? city);
+    const originDistrict = emptyToNull(req.body.origin_district ?? req.body.originDistrict ?? district);
+    const originNote = emptyToNull(req.body.origin_note ?? req.body.originNote ?? address);
+    const destinationCity = emptyToNull(req.body.destination_city ?? req.body.destinationCity);
+    const destinationDistrict = emptyToNull(req.body.destination_district ?? req.body.destinationDistrict);
+    const destinationNote = emptyToNull(req.body.destination_note ?? req.body.destinationNote);
+    const legacyCity = emptyToNull(city) || originCity;
+    const legacyDistrict = emptyToNull(district) || originDistrict;
+    const legacyAddress = emptyToNull(address) || originNote;
     if (!title) {
       return res.status(400).json({ error: 'İlan başlığı zorunludur.' });
     }
 
     const { rows } = await query(`
       INSERT INTO listings
-        (seller_id,listing_type,title,category,quantity,unit,price_per_unit,price_type,city,district,address,description,transport_date)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        (seller_id,listing_type,title,category,quantity,unit,price_per_unit,price_type,city,district,address,origin_city,origin_district,origin_note,destination_city,destination_district,destination_note,description,transport_date)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *, title AS crop_name, transport_date AS harvest_date
     `, [req.user.id, listing_type, title, category, quantity, unit, price_per_unit, price_type,
-        city||null, district||null, address||null, description||null, transportDate]);
+        legacyCity, legacyDistrict, legacyAddress,
+        originCity, originDistrict, originNote,
+        destinationCity, destinationDistrict, destinationNote,
+        emptyToNull(description), transportDate]);
 
     res.status(201).json(rows[0]);
   } catch (err) { next(err); }
@@ -221,6 +268,18 @@ router.patch('/:id', authMiddleware, async (req, res, next) => {
       city: 'city',
       district: 'district',
       address: 'address',
+      origin_city: 'origin_city',
+      originCity: 'origin_city',
+      origin_district: 'origin_district',
+      originDistrict: 'origin_district',
+      origin_note: 'origin_note',
+      originNote: 'origin_note',
+      destination_city: 'destination_city',
+      destinationCity: 'destination_city',
+      destination_district: 'destination_district',
+      destinationDistrict: 'destination_district',
+      destination_note: 'destination_note',
+      destinationNote: 'destination_note',
       description: 'description',
       status: 'status',
       harvest_date: 'transport_date',

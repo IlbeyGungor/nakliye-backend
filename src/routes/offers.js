@@ -117,6 +117,12 @@ router.get('/chats', authMiddleware, async (req, res, next) => {
           'crop_name', l.title,
           'city', l.city,
           'district', l.district,
+          'origin_city', l.origin_city,
+          'origin_district', l.origin_district,
+          'origin_note', l.origin_note,
+          'destination_city', l.destination_city,
+          'destination_district', l.destination_district,
+          'destination_note', l.destination_note,
           'unit', l.unit,
           'price_per_unit', l.price_per_unit,
           'status', l.status
@@ -264,7 +270,14 @@ router.get('/my', authMiddleware, async (req, res, next) => {
     const { rows } = await query(`
       SELECT o.*,
         json_build_object('id',l.id,'crop_name',l.title,'city',l.city,
-          'district',l.district,'unit',l.unit,'price_per_unit',l.price_per_unit) AS listing,
+          'district',l.district,
+          'origin_city',l.origin_city,
+          'origin_district',l.origin_district,
+          'origin_note',l.origin_note,
+          'destination_city',l.destination_city,
+          'destination_district',l.destination_district,
+          'destination_note',l.destination_note,
+          'unit',l.unit,'price_per_unit',l.price_per_unit) AS listing,
         json_build_object('id',u.id,'name',u.name,'phone',u.phone,'phone_verified',u.phone_verified) AS seller
       FROM offers o
       JOIN listings l ON l.id = o.listing_id
@@ -283,7 +296,14 @@ router.get('/received', authMiddleware, async (req, res, next) => {
   try {
     const { rows } = await query(`
       SELECT o.*,
-        json_build_object('id',l.id,'crop_name',l.title,'city',l.city,'district',l.district,'unit',l.unit,'price_per_unit',l.price_per_unit) AS listing,
+        json_build_object('id',l.id,'crop_name',l.title,'city',l.city,'district',l.district,
+          'origin_city',l.origin_city,
+          'origin_district',l.origin_district,
+          'origin_note',l.origin_note,
+          'destination_city',l.destination_city,
+          'destination_district',l.destination_district,
+          'destination_note',l.destination_note,
+          'unit',l.unit,'price_per_unit',l.price_per_unit) AS listing,
         json_build_object('id',u.id,'name',u.name,'phone',u.phone,'phone_verified',u.phone_verified,'rating',u.rating,'is_verified',u.is_verified) AS buyer
       FROM offers o
       JOIN listings l ON l.id = o.listing_id
