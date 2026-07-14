@@ -285,6 +285,7 @@ router.patch('/:id', authMiddleware, async (req, res, next) => {
       body_type: 'body_type',
       bodyType: 'body_type',
       quantity: 'quantity',
+      unit: 'unit',
       price_per_unit: 'price_per_unit',
       price_type: 'price_type',
       city: 'city',
