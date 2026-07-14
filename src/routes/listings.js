@@ -39,6 +39,22 @@ function emptyToNull(value) {
   return text.length ? text : null;
 }
 
+const allowedCategories = new Set(['van', 'truck', 'semi_truck', 'other']);
+
+function normalizeCategories(value, fallback) {
+  const source = Array.isArray(value)
+    ? value
+    : value === undefined || value === null
+      ? []
+      : [value];
+  const normalized = source
+    .map(emptyToNull)
+    .filter((item) => item && allowedCategories.has(item));
+  const unique = [...new Set(normalized)];
+  if (!unique.length && fallback) return normalizeCategories(fallback);
+  return unique;
+}
+
 // GET /api/listings  (public, with optional filters)
 router.get('/', async (req, res, next) => {
   try {
@@ -69,7 +85,7 @@ router.get('/', async (req, res, next) => {
       params.push(`%${search}%`);
       conditions.push(`(
         l.title ILIKE $${params.length}
-        OR l.category ILIKE $${params.length}
+        OR l.category::text ILIKE $${params.length}
         OR l.body_type ILIKE $${params.length}
         OR l.city ILIKE $${params.length}
         OR l.district ILIKE $${params.length}
@@ -84,7 +100,7 @@ router.get('/', async (req, res, next) => {
     }
     const listingType = listing_type || type;
     if (listingType) { params.push(listingType); conditions.push(`l.listing_type = $${params.length}`); }
-    if (category) { params.push(category); conditions.push(`l.category = $${params.length}`); }
+    if (category) { params.push(category); conditions.push(`l.category ? $${params.length}`); }
     if (city) {
       params.push(city);
       conditions.push(`(
@@ -202,7 +218,7 @@ router.post('/', authMiddleware, [
   body('listing_type').isIn(['vehicle_search','cargo_search']).withMessage('İlan tipi geçersiz.'),
   body('crop_name').optional({ nullable: true }).trim(),
   body('title').optional({ nullable: true }).trim(),
-  body('category').isIn(['van','truck','semi_truck','other']),
+  body('category').custom((value) => normalizeCategories(value).length > 0),
   body('body_type').optional({ nullable: true }).trim(),
   body('quantity').optional({ nullable: true }).isFloat({ gt: 0 }),
   body('price_per_unit').optional({ nullable: true }).isFloat({ gt: 0 }),
@@ -231,6 +247,7 @@ router.post('/', authMiddleware, [
     const destinationDistrict = emptyToNull(req.body.destination_district ?? req.body.destinationDistrict);
     const destinationNote = emptyToNull(req.body.destination_note ?? req.body.destinationNote);
     const bodyType = emptyToNull(req.body.body_type ?? req.body.bodyType);
+    const categories = normalizeCategories(category);
     const legacyCity = emptyToNull(city) || originCity;
     const legacyDistrict = emptyToNull(district) || originDistrict;
     const legacyAddress = emptyToNull(address) || originNote;
@@ -241,9 +258,9 @@ router.post('/', authMiddleware, [
     const { rows } = await query(`
       INSERT INTO listings
         (seller_id,listing_type,title,category,body_type,quantity,unit,price_per_unit,price_type,city,district,address,origin_city,origin_district,origin_note,destination_city,destination_district,destination_note,description,transport_date)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       RETURNING *, title AS crop_name, transport_date AS harvest_date
-    `, [req.user.id, listing_type, title, category, bodyType, quantity, unit, price_per_unit, price_type,
+    `, [req.user.id, listing_type, title, JSON.stringify(categories), bodyType, quantity, unit, price_per_unit, price_type,
         legacyCity, legacyDistrict, legacyAddress,
         originCity, originDistrict, originNote,
         destinationCity, destinationDistrict, destinationNote,
@@ -293,8 +310,13 @@ router.patch('/:id', authMiddleware, async (req, res, next) => {
     const sets = [], params = [];
     for (const key of Object.keys(keyMap)) {
       if (req.body[key] !== undefined) {
-        params.push(req.body[key]);
-        sets.push(`${keyMap[key]}=$${params.length}`);
+        let value = req.body[key];
+        if (keyMap[key] === 'category') {
+          value = JSON.stringify(normalizeCategories(value, existing[0].category));
+        }
+        params.push(value);
+        const cast = keyMap[key] === 'category' ? '::jsonb' : '';
+        sets.push(keyMap[key] + '=$' + params.length + cast);
       }
     }
     if (!sets.length) return res.status(400).json({ error: 'Güncellenecek alan yok.' });

@@ -49,7 +49,7 @@ const migrate = async () => {
         seller_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         listing_type    VARCHAR(40) NOT NULL CHECK (listing_type IN ('vehicle_search','cargo_search')),
         title           VARCHAR(160) NOT NULL,
-        category        VARCHAR(40) NOT NULL CHECK (category IN ('van','truck','semi_truck','other')),
+        category        JSONB NOT NULL DEFAULT '[]'::jsonb,
         body_type       VARCHAR(120),
         quantity        NUMERIC(12,2),
         unit            VARCHAR(20) NOT NULL DEFAULT 'ton',
@@ -80,6 +80,45 @@ const migrate = async () => {
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS listing_type VARCHAR(40) DEFAULT 'vehicle_search'`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS title VARCHAR(160)`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS body_type VARCHAR(120)`);
+    await client.query(`ALTER TABLE listings DROP CONSTRAINT IF EXISTS listings_category_check`);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_name = 'listings'
+            AND column_name = 'category'
+            AND data_type <> 'jsonb'
+        ) THEN
+          ALTER TABLE listings
+          ALTER COLUMN category TYPE JSONB
+          USING CASE
+            WHEN category IS NULL THEN '[]'::jsonb
+            ELSE jsonb_build_array(category::text)
+          END;
+        END IF;
+      END $$;
+    `);
+    await client.query(`ALTER TABLE listings ALTER COLUMN category SET DEFAULT '[]'::jsonb`);
+    await client.query(`ALTER TABLE listings ALTER COLUMN category SET NOT NULL`);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_name = 'listings'
+            AND column_name = 'requested_categories'
+        ) THEN
+          UPDATE listings
+          SET category = requested_categories
+          WHERE jsonb_typeof(requested_categories) = 'array'
+            AND jsonb_array_length(requested_categories) > 0;
+        END IF;
+      END $$;
+    `);
+    await client.query(`ALTER TABLE listings DROP COLUMN IF EXISTS requested_categories`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS transport_date DATE`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_until TIMESTAMPTZ`);
@@ -193,7 +232,8 @@ const migrate = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_city         ON listings(city)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_origin_city  ON listings(origin_city)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_destination_city ON listings(destination_city)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_category     ON listings(category)`);
+    await client.query(`DROP INDEX IF EXISTS idx_listings_category`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_category_gin ON listings USING GIN (category)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_listings_status       ON listings(status)`);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_listings_reserved_until
