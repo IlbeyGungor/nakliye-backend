@@ -50,9 +50,9 @@ const migrate = async () => {
         listing_type    VARCHAR(40) NOT NULL CHECK (listing_type IN ('vehicle_search','cargo_search')),
         title           VARCHAR(160) NOT NULL,
         category        VARCHAR(40) NOT NULL CHECK (category IN ('van','truck','semi_truck','flatbed','refrigerated','container','other')),
-        quantity        NUMERIC(12,2) NOT NULL,
+        quantity        NUMERIC(12,2),
         unit            VARCHAR(20) NOT NULL DEFAULT 'ton',
-        price_per_unit  NUMERIC(10,2) NOT NULL,
+        price_per_unit  NUMERIC(10,2),
         price_type      VARCHAR(20) NOT NULL CHECK (price_type IN ('fixed','negotiate')) DEFAULT 'negotiate',
         city            VARCHAR(80),
         district        VARCHAR(80),
@@ -87,6 +87,8 @@ const migrate = async () => {
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_city VARCHAR(80)`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_district VARCHAR(120)`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS destination_note VARCHAR(255)`);
+    await client.query(`ALTER TABLE listings ALTER COLUMN quantity DROP NOT NULL`);
+    await client.query(`ALTER TABLE listings ALTER COLUMN price_per_unit DROP NOT NULL`);
     await client.query(`
       UPDATE listings
       SET origin_city = COALESCE(origin_city, city),
