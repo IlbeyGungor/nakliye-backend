@@ -70,6 +70,7 @@ router.get('/', async (req, res, next) => {
       conditions.push(`(
         l.title ILIKE $${params.length}
         OR l.category ILIKE $${params.length}
+        OR l.body_type ILIKE $${params.length}
         OR l.city ILIKE $${params.length}
         OR l.district ILIKE $${params.length}
         OR l.address ILIKE $${params.length}
@@ -201,7 +202,8 @@ router.post('/', authMiddleware, [
   body('listing_type').isIn(['vehicle_search','cargo_search']).withMessage('İlan tipi geçersiz.'),
   body('crop_name').optional({ nullable: true }).trim(),
   body('title').optional({ nullable: true }).trim(),
-  body('category').isIn(['van','truck','semi_truck','flatbed','refrigerated','container','other']),
+  body('category').isIn(['van','truck','semi_truck','other']),
+  body('body_type').optional({ nullable: true }).trim(),
   body('quantity').optional({ nullable: true }).isFloat({ gt: 0 }),
   body('price_per_unit').optional({ nullable: true }).isFloat({ gt: 0 }),
   body('origin_city').optional({ nullable: true }).trim(),
@@ -228,6 +230,7 @@ router.post('/', authMiddleware, [
     const destinationCity = emptyToNull(req.body.destination_city ?? req.body.destinationCity);
     const destinationDistrict = emptyToNull(req.body.destination_district ?? req.body.destinationDistrict);
     const destinationNote = emptyToNull(req.body.destination_note ?? req.body.destinationNote);
+    const bodyType = emptyToNull(req.body.body_type ?? req.body.bodyType);
     const legacyCity = emptyToNull(city) || originCity;
     const legacyDistrict = emptyToNull(district) || originDistrict;
     const legacyAddress = emptyToNull(address) || originNote;
@@ -237,10 +240,10 @@ router.post('/', authMiddleware, [
 
     const { rows } = await query(`
       INSERT INTO listings
-        (seller_id,listing_type,title,category,quantity,unit,price_per_unit,price_type,city,district,address,origin_city,origin_district,origin_note,destination_city,destination_district,destination_note,description,transport_date)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        (seller_id,listing_type,title,category,body_type,quantity,unit,price_per_unit,price_type,city,district,address,origin_city,origin_district,origin_note,destination_city,destination_district,destination_note,description,transport_date)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       RETURNING *, title AS crop_name, transport_date AS harvest_date
-    `, [req.user.id, listing_type, title, category, quantity, unit, price_per_unit, price_type,
+    `, [req.user.id, listing_type, title, category, bodyType, quantity, unit, price_per_unit, price_type,
         legacyCity, legacyDistrict, legacyAddress,
         originCity, originDistrict, originNote,
         destinationCity, destinationDistrict, destinationNote,
@@ -262,6 +265,8 @@ router.patch('/:id', authMiddleware, async (req, res, next) => {
       title: 'title',
       listing_type: 'listing_type',
       category: 'category',
+      body_type: 'body_type',
+      bodyType: 'body_type',
       quantity: 'quantity',
       price_per_unit: 'price_per_unit',
       price_type: 'price_type',

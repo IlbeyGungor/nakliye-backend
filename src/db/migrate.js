@@ -49,7 +49,8 @@ const migrate = async () => {
         seller_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         listing_type    VARCHAR(40) NOT NULL CHECK (listing_type IN ('vehicle_search','cargo_search')),
         title           VARCHAR(160) NOT NULL,
-        category        VARCHAR(40) NOT NULL CHECK (category IN ('van','truck','semi_truck','flatbed','refrigerated','container','other')),
+        category        VARCHAR(40) NOT NULL CHECK (category IN ('van','truck','semi_truck','other')),
+        body_type       VARCHAR(120),
         quantity        NUMERIC(12,2),
         unit            VARCHAR(20) NOT NULL DEFAULT 'ton',
         price_per_unit  NUMERIC(10,2),
@@ -78,6 +79,7 @@ const migrate = async () => {
 
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS listing_type VARCHAR(40) DEFAULT 'vehicle_search'`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS title VARCHAR(160)`);
+    await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS body_type VARCHAR(120)`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS transport_date DATE`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS reserved_until TIMESTAMPTZ`);
