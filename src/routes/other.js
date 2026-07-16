@@ -41,6 +41,23 @@ usersRouter.post('/:id/block', authMiddleware, async (req, res, next) => {
       ON CONFLICT (blocker_id, blocked_id) DO NOTHING
     `, [req.user.id, blockedId]);
 
+    try {
+      await mailer.sendMail({
+        from: process.env.SMTP_USER,
+        to: process.env.REPORT_TO_EMAIL || 'ilbey.gungor@outlook.com',
+        subject: 'Nakliye Pazar Kullanıcı Engelleme Bildirimi',
+        text: `
+Engelleyen kullanıcı ID: ${req.user.id}
+Engellenen kullanıcı ID: ${blockedId}
+Tarih: ${new Date().toISOString()}
+Sebep: Diğer
+Açıklama: Kullanıcı engelleme aksiyonu
+        `,
+      });
+    } catch (mailErr) {
+      console.error('User block notification mail error:', mailErr);
+    }
+
     res.json({ ok: true, blocked_user_id: blockedId });
   } catch (err) { next(err); }
 });
