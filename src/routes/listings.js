@@ -56,7 +56,7 @@ function normalizeCategories(value, fallback) {
 }
 
 // GET /api/listings  (public, with optional filters)
-router.get('/', async (req, res, next) => {
+router.get('/', authMiddleware.optional, async (req, res, next) => {
   try {
     const {
       search,
@@ -109,6 +109,14 @@ router.get('/', async (req, res, next) => {
         OR l.destination_city = $${params.length}
       )`);
     }
+    if (req.user) {
+      params.push(req.user.id);
+      conditions.push(`NOT EXISTS (
+        SELECT 1 FROM user_blocks ub
+        WHERE (ub.blocker_id = $${params.length} AND ub.blocked_id = l.seller_id)
+           OR (ub.blocker_id = l.seller_id AND ub.blocked_id = $${params.length})
+      )`);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     params.push(parseInt(limit), offset);
@@ -141,6 +149,17 @@ router.get('/:id', authMiddleware.optional, async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'İlan bulunamadı.' });
 
     const listing = rows[0];
+    if (req.user && listing.seller_id !== req.user.id) {
+      const { rows: blockRows } = await query(`
+        SELECT 1 FROM user_blocks
+        WHERE (blocker_id=$1 AND blocked_id=$2)
+           OR (blocker_id=$2 AND blocked_id=$1)
+        LIMIT 1
+      `, [req.user.id, listing.seller_id]);
+      if (blockRows.length) {
+        return res.status(404).json({ error: 'İlan bulunamadı.' });
+      }
+    }
     if (listing.status === 'reserved') {
       if (!req.user) return res.status(404).json({ error: 'İlan bulunamadı.' });
 
